@@ -142,7 +142,9 @@ export function ScanFlow() {
       const data = await response.json();
 
       if (!response.ok) {
-        setNotRecognizedReason(data.error ?? "Product niet herkend.");
+        // TODO: debug-detail weer verwijderen zodra de vision-AI-koppeling stabiel draait.
+        const reason = data.debug ? `${data.error} (debug: ${data.debug})` : data.error ?? "Product niet herkend.";
+        setNotRecognizedReason(reason);
         setDetected(null);
         return;
       }

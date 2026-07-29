@@ -39,8 +39,13 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("Productherkenning mislukt:", error);
+    const detail = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: "We konden het product niet herkennen. Probeer een duidelijkere afbeelding." },
+      {
+        error: "We konden het product niet herkennen. Probeer een duidelijkere afbeelding.",
+        // TODO: verwijder dit debug-veld weer zodra de vision-AI-koppeling stabiel draait.
+        debug: detail,
+      },
       { status: 502 }
     );
   }
