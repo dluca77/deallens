@@ -16,13 +16,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { demoProduct } from "@/lib/demo-data";
 import { cn } from "@/lib/utils";
+import type { VisionProductResult } from "@/lib/vision";
 
 type FlowStep = "upload" | "select" | "analyzing" | "confirm" | "not_recognized";
 
+type DetectedProduct = VisionProductResult & { image: string; source: "ai" | "demo" };
+
 const ACCEPTED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 const MAX_SIZE_MB = 15;
+const MIN_CONFIDENCE = 40;
+export const DEALLENS_STORAGE_KEY = "deallens:lastDetectedProduct";
 
 const analysisSteps = [
   "Afbeelding analyseren",
@@ -34,14 +38,37 @@ const analysisSteps = [
   "Beste deal berekenen",
 ];
 
+const demoFallbackProduct: DetectedProduct = {
+  brand: "Nike",
+  name: "Air Max 95 Essential",
+  variant: "Heren sneaker",
+  color: "Zwart",
+  size: "42",
+  category: "Schoenen",
+  description:
+    "Klassieke Nike Air Max 95 in de Essential-uitvoering, met gelaagd bovenwerk en zichtbare Air-zool.",
+  confidence: 94,
+  image: "https://placehold.co/600x600/101828/FFFFFF?text=Nike+Air+Max+95",
+  source: "demo",
+};
+
+function fileToBase64(dataUrl: string): { base64: string; mimeType: string } {
+  const [header, base64] = dataUrl.split(",");
+  const mimeType = header.match(/data:(.*);base64/)?.[1] ?? "image/jpeg";
+  return { base64, mimeType };
+}
+
 export function ScanFlow() {
   const router = useRouter();
   const [step, setStep] = useState<FlowStep>("upload");
   const [image, setImage] = useState<string | null>(null);
+  const [isRealImage, setIsRealImage] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [productUrl, setProductUrl] = useState("");
   const [selection, setSelection] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const [editableName, setEditableName] = useState(`${demoProduct.brand} ${demoProduct.name}`);
+  const [detected, setDetected] = useState<DetectedProduct | null>(null);
+  const [notRecognizedReason, setNotRecognizedReason] = useState<string | null>(null);
+  const [editableName, setEditableName] = useState("");
   const [editing, setEditing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragBoxRef = useRef<HTMLDivElement>(null);
@@ -61,6 +88,7 @@ export function ScanFlow() {
     const reader = new FileReader();
     reader.onload = () => {
       setImage(reader.result as string);
+      setIsRealImage(true);
       setStep("select");
     };
     reader.readAsDataURL(file);
@@ -84,14 +112,74 @@ export function ScanFlow() {
 
   const removeImage = () => {
     setImage(null);
+    setIsRealImage(false);
     setSelection(null);
     setStep("upload");
     setFileError(null);
+    setDetected(null);
+    setNotRecognizedReason(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const runAnalysis = useCallback(async () => {
+    if (!image) return;
+
+    if (!isRealImage) {
+      // URL-gebaseerde flow: er is geen echte afbeelding om te analyseren, dus we tonen het demo-product.
+      setDetected(demoFallbackProduct);
+      setEditableName(`${demoFallbackProduct.brand} ${demoFallbackProduct.name}`);
+      return;
+    }
+
+    try {
+      const { base64, mimeType } = fileToBase64(image);
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ image: base64, mimeType }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setNotRecognizedReason(data.error ?? "Product niet herkend.");
+        setDetected(null);
+        return;
+      }
+
+      const result = data as VisionProductResult;
+      if (result.confidence < MIN_CONFIDENCE) {
+        setNotRecognizedReason(
+          `We zijn maar ${result.confidence}% zeker van deze herkenning, dat is te laag om een betrouwbaar resultaat te tonen.`
+        );
+        setDetected(null);
+        return;
+      }
+
+      const finalProduct: DetectedProduct = { ...result, image, source: "ai" };
+      setDetected(finalProduct);
+      setEditableName(`${finalProduct.brand} ${finalProduct.name}`);
+    } catch {
+      setNotRecognizedReason(
+        "Er ging iets mis bij het analyseren van je screenshot. Controleer je verbinding en probeer opnieuw."
+      );
+      setDetected(null);
+    }
+  }, [image, isRealImage]);
+
   const startAnalysis = () => {
+    setNotRecognizedReason(null);
     setStep("analyzing");
+  };
+
+  const goToResults = () => {
+    if (detected && typeof window !== "undefined") {
+      window.sessionStorage.setItem(
+        DEALLENS_STORAGE_KEY,
+        JSON.stringify({ ...detected, name: editableName || `${detected.brand} ${detected.name}` })
+      );
+    }
+    router.push("/results");
   };
 
   return (
@@ -202,12 +290,16 @@ export function ScanFlow() {
                   disabled={!productUrl}
                   onClick={() => {
                     setImage("https://placehold.co/700x700/101828/FFFFFF?text=Productpagina");
+                    setIsRealImage(false);
                     setStep("select");
                   }}
                 >
                   Gebruik URL
                 </Button>
               </div>
+              <p className="mt-2 text-xs text-slate-400">
+                Bij een URL kan de AI de pagina nog niet live ophalen; we tonen dan een voorbeeldresultaat.
+              </p>
             </div>
           </CardBody>
         </Card>
@@ -224,39 +316,76 @@ export function ScanFlow() {
       )}
 
       {step === "analyzing" && (
-        <AnalyzingStep onDone={() => setStep(Math.random() > 0.08 ? "confirm" : "not_recognized")} />
+        <AnalyzingStep
+          run={runAnalysis}
+          onDone={() => setStep((prev) => (prev === "analyzing" ? "confirm" : prev))}
+        />
       )}
 
-      {step === "confirm" && image && (
+      {step === "confirm" && image && detected && (
         <ConfirmStep
-          image={image}
+          detected={detected}
           editableName={editableName}
           setEditableName={setEditableName}
           editing={editing}
           setEditing={setEditing}
-          onConfirm={() => router.push("/results")}
+          onConfirm={goToResults}
           onReject={() => setEditing(true)}
         />
       )}
 
-      {step === "not_recognized" && (
-        <Card>
-          <CardBody className="text-center">
-            <h2 className="text-xl font-bold text-dl-text">Product niet herkend</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              We konden het product niet met voldoende zekerheid herkennen. Probeer een duidelijkere
-              afbeelding of selecteer alleen het product.
-            </p>
-            <div className="mt-5 flex flex-wrap justify-center gap-3">
-              <Button variant="outline" onClick={removeImage}>
-                Andere afbeelding uploaden
-              </Button>
-              <Button onClick={() => setStep("confirm")}>Product handmatig invoeren</Button>
-            </div>
-          </CardBody>
-        </Card>
+      {step === "confirm" && !detected && (
+        <NotRecognizedCard
+          reason={notRecognizedReason}
+          onRetry={removeImage}
+          onManual={() => {
+            const manual: DetectedProduct = {
+              brand: "",
+              name: "",
+              variant: "",
+              color: "",
+              size: null,
+              category: "",
+              description: "Handmatig ingevoerd product.",
+              confidence: 0,
+              image: image ?? demoFallbackProduct.image,
+              source: "demo",
+            };
+            setDetected(manual);
+            setEditableName("");
+            setEditing(true);
+          }}
+        />
       )}
     </div>
+  );
+}
+
+function NotRecognizedCard({
+  reason,
+  onRetry,
+  onManual,
+}: {
+  reason: string | null;
+  onRetry: () => void;
+  onManual: () => void;
+}) {
+  return (
+    <Card>
+      <CardBody className="text-center">
+        <h2 className="text-xl font-bold text-dl-text">Product niet herkend</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          {reason ??
+            "We konden het product niet met voldoende zekerheid herkennen. Probeer een duidelijkere afbeelding of selecteer alleen het product."}
+        </p>
+        <div className="mt-5 flex flex-wrap justify-center gap-3">
+          <Button variant="outline" onClick={onRetry}>
+            Andere afbeelding uploaden
+          </Button>
+          <Button onClick={onManual}>Product handmatig invoeren</Button>
+        </div>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -346,28 +475,38 @@ function SelectStep({
   );
 }
 
-function AnalyzingStep({ onDone }: { onDone: () => void }) {
+function AnalyzingStep({ run, onDone }: { run: () => Promise<void>; onDone: () => void }) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const onDoneRef = useRef(onDone);
+  const startedRef = useRef(false);
 
   useEffect(() => {
-    onDoneRef.current = onDone;
-  }, [onDone]);
+    if (startedRef.current) return;
+    startedRef.current = true;
 
-  useEffect(() => {
+    let cancelled = false;
     let i = 0;
     let timeoutId: ReturnType<typeof setTimeout>;
-    const tick = () => {
+
+    const advance = () => {
       i += 1;
-      setActiveIndex(i);
-      if (i >= analysisSteps.length) {
-        timeoutId = setTimeout(() => onDoneRef.current(), 500);
-      } else {
-        timeoutId = setTimeout(tick, 550);
+      if (!cancelled) setActiveIndex(i);
+      if (i < analysisSteps.length) {
+        timeoutId = setTimeout(advance, 500);
       }
     };
-    timeoutId = setTimeout(tick, 550);
-    return () => clearTimeout(timeoutId);
+    timeoutId = setTimeout(advance, 500);
+
+    const minDuration = new Promise((resolve) => setTimeout(resolve, analysisSteps.length * 500));
+
+    Promise.all([run(), minDuration]).then(() => {
+      if (!cancelled) onDone();
+    });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -416,7 +555,7 @@ function AnalyzingStep({ onDone }: { onDone: () => void }) {
 }
 
 function ConfirmStep({
-  image,
+  detected,
   editableName,
   setEditableName,
   editing,
@@ -424,7 +563,7 @@ function ConfirmStep({
   onConfirm,
   onReject,
 }: {
-  image: string;
+  detected: DetectedProduct;
   editableName: string;
   setEditableName: (v: string) => void;
   editing: boolean;
@@ -435,13 +574,13 @@ function ConfirmStep({
   return (
     <Card className="dl-fade-up">
       <CardBody>
-        <Badge tone="gray" className="mb-3">
-          Demo-resultaat
+        <Badge tone={detected.source === "ai" ? "blue" : "gray"} className="mb-3">
+          {detected.source === "ai" ? "AI-analyse" : "Demo-resultaat"}
         </Badge>
         <div className="grid gap-6 md:grid-cols-[220px_1fr]">
           <img
-            src={demoProduct.image}
-            alt={`${demoProduct.brand} ${demoProduct.name}`}
+            src={detected.image}
+            alt={`${detected.brand} ${detected.name}`}
             className="h-52 w-full rounded-xl object-cover md:h-full"
           />
           <div>
@@ -461,7 +600,7 @@ function ConfirmStep({
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-semibold text-slate-500">Merk</label>
-                    <input defaultValue={demoProduct.brand} className="mt-1 w-full rounded-lg border border-dl-border px-3 py-2 text-sm" />
+                    <input defaultValue={detected.brand} className="mt-1 w-full rounded-lg border border-dl-border px-3 py-2 text-sm" />
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-slate-500">Modelnummer</label>
@@ -476,19 +615,19 @@ function ConfirmStep({
               <>
                 <h1 className="text-2xl font-bold text-dl-text">{editableName}</h1>
                 <p className="text-sm text-slate-500">
-                  {demoProduct.color} · Maat {demoProduct.size} · {demoProduct.category}
+                  {detected.color} {detected.size ? `· Maat ${detected.size}` : ""} · {detected.category}
                 </p>
-                <p className="mt-3 text-sm text-slate-600">{demoProduct.description}</p>
+                <p className="mt-3 text-sm text-slate-600">{detected.description}</p>
 
                 <div className="mt-4 flex items-center gap-2">
                   <div className="h-2 flex-1 max-w-40 overflow-hidden rounded-full bg-slate-100">
                     <div
                       className="h-full rounded-full bg-dl-green"
-                      style={{ width: `${demoProduct.confidence}%` }}
+                      style={{ width: `${detected.confidence}%` }}
                     />
                   </div>
                   <span className="text-sm font-semibold text-dl-green">
-                    Herkenningszekerheid: {demoProduct.confidence}%
+                    Herkenningszekerheid: {detected.confidence}%
                   </span>
                 </div>
               </>
@@ -507,9 +646,6 @@ function ConfirmStep({
             </div>
           </div>
         )}
-        <p className="mt-4 flex items-center gap-1.5 text-xs text-slate-400">
-          <img src={image} alt="" className="h-6 w-6 rounded object-cover" aria-hidden /> Origineel geüploade screenshot
-        </p>
       </CardBody>
     </Card>
   );

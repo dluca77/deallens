@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, ShieldAlert } from "lucide-react";
+import { Pencil, ShieldAlert, Sparkles } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardBody } from "@/components/ui/card";
 import { BestDealCard } from "@/components/results/best-deal-card";
 import { ResultCard } from "@/components/results/result-card";
@@ -19,6 +20,10 @@ import {
   totalPrice,
 } from "@/lib/demo-data";
 import { cn } from "@/lib/utils";
+import { DEALLENS_STORAGE_KEY } from "@/components/scan/scan-flow";
+import type { VisionProductResult } from "@/lib/vision";
+
+type StoredDetectedProduct = VisionProductResult & { image: string; source: "ai" | "demo" };
 
 type SortKey = "price" | "discount" | "delivery" | "match" | "reliable";
 
@@ -38,6 +43,39 @@ export function ResultsExplorer() {
   const [onlyFreeShipping, setOnlyFreeShipping] = useState(false);
   const [onlyCoupon, setOnlyCoupon] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [detected, setDetected] = useState<StoredDetectedProduct | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem(DEALLENS_STORAGE_KEY);
+      if (raw) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of a browser API unavailable during SSR/prerender
+        setDetected(JSON.parse(raw));
+      }
+    } catch {
+      // sessionStorage niet beschikbaar of ongeldige data; val terug op demoproduct.
+    }
+  }, []);
+
+  const productDisplay = detected
+    ? {
+        image: detected.image,
+        brand: detected.brand,
+        category: detected.category,
+        name: detected.name,
+        color: detected.color,
+        size: detected.size ?? undefined,
+        confidence: detected.confidence,
+      }
+    : {
+        image: demoProduct.image,
+        brand: demoProduct.brand,
+        category: demoProduct.category,
+        name: demoProduct.name,
+        color: demoProduct.color,
+        size: demoProduct.size,
+        confidence: demoProduct.confidence,
+      };
 
   const best = bestDealResult();
 
@@ -93,19 +131,39 @@ export function ResultsExplorer() {
         </div>
 
         <div>
+          {detected && (
+            <div className="mb-4 flex items-start gap-2 rounded-xl bg-blue-50 p-3 text-xs text-dl-primary">
+              <Sparkles className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              <p>
+                Dit product is herkend door de vision-AI op basis van jouw geüploade screenshot. De
+                prijzen, webshops en kortingscodes hieronder zijn nog voorbeelddata totdat er live
+                shopping-bronnen zijn gekoppeld.
+              </p>
+            </div>
+          )}
           <Card className="mb-6">
             <CardBody className="grid gap-4 md:grid-cols-[160px_1fr_auto]">
-              <img src={demoProduct.image} alt={demoProduct.name} className="h-32 w-full rounded-xl object-cover md:h-full" />
+              <img
+                src={productDisplay.image}
+                alt={productDisplay.name}
+                className="h-32 w-full rounded-xl object-cover md:h-full"
+              />
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  {demoProduct.brand} · {demoProduct.category}
+                  {productDisplay.brand} · {productDisplay.category}
+                  {detected && (
+                    <Badge tone="blue" className="ml-2 normal-case">
+                      AI-analyse
+                    </Badge>
+                  )}
                 </p>
-                <h1 className="text-xl font-bold text-dl-text">{demoProduct.name}</h1>
+                <h1 className="text-xl font-bold text-dl-text">{productDisplay.name}</h1>
                 <p className="text-sm text-slate-500">
-                  {demoProduct.color} · Maat {demoProduct.size}
+                  {productDisplay.color}
+                  {productDisplay.size ? ` · Maat ${productDisplay.size}` : ""}
                 </p>
                 <p className="mt-1 text-sm font-medium text-dl-green">
-                  Herkenningsscore: {demoProduct.confidence}%
+                  Herkenningsscore: {productDisplay.confidence}%
                 </p>
               </div>
               <div className="flex items-start md:items-center">
