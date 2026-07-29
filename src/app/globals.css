@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+:root {
+  --dl-bg: #f6f8fc;
+  --dl-text: #101828;
+  --dl-primary: #2563eb;
+  --dl-primary-dark: #1d4ed8;
+  --dl-navy: #172554;
+  --dl-green: #16a34a;
+  --dl-warning: #f59e0b;
+  --dl-error: #dc2626;
+  --dl-card: #ffffff;
+  --dl-border: #e4e9f2;
+  --dl-muted: #667085;
+
+  --background: var(--dl-bg);
+  --foreground: var(--dl-text);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-dl-bg: var(--dl-bg);
+  --color-dl-text: var(--dl-text);
+  --color-dl-primary: var(--dl-primary);
+  --color-dl-primary-dark: var(--dl-primary-dark);
+  --color-dl-navy: var(--dl-navy);
+  --color-dl-green: var(--dl-green);
+  --color-dl-warning: var(--dl-warning);
+  --color-dl-error: var(--dl-error);
+  --color-dl-card: var(--dl-card);
+  --color-dl-border: var(--dl-border);
+  --color-dl-muted: var(--dl-muted);
+  --font-heading: var(--font-heading);
+  --font-body: var(--font-body);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body), Arial, Helvetica, sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading), Arial, Helvetica, sans-serif;
+}
+
+* {
+  scrollbar-width: thin;
+}
+
+@keyframes dl-pulse-ring {
+  0% { transform: scale(0.9); opacity: 0.6; }
+  70% { transform: scale(1.4); opacity: 0; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+.dl-pulse-ring {
+  animation: dl-pulse-ring 1.8s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+
+@keyframes dl-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dl-fade-up {
+  animation: dl-fade-up 0.4s ease-out both;
+}
+
+:focus-visible {
+  outline: 2px solid var(--dl-primary);
+  outline-offset: 2px;
+}
