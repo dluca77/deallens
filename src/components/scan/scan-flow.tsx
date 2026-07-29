@@ -52,6 +52,16 @@ const demoFallbackProduct: DetectedProduct = {
   source: "demo",
 };
 
+function buildDisplayName(brand: string, name: string): string {
+  if (!brand) return name;
+  const normalizedName = name.trim().toLowerCase();
+  const normalizedBrand = brand.trim().toLowerCase();
+  if (normalizedName === normalizedBrand || normalizedName.startsWith(`${normalizedBrand} `)) {
+    return name;
+  }
+  return `${brand} ${name}`;
+}
+
 function fileToBase64(dataUrl: string): { base64: string; mimeType: string } {
   const [header, base64] = dataUrl.split(",");
   const mimeType = header.match(/data:(.*);base64/)?.[1] ?? "image/jpeg";
@@ -158,7 +168,7 @@ export function ScanFlow() {
 
       const finalProduct: DetectedProduct = { ...result, image, source: "ai" };
       setDetected(finalProduct);
-      setEditableName(`${finalProduct.brand} ${finalProduct.name}`);
+      setEditableName(buildDisplayName(finalProduct.brand, finalProduct.name));
     } catch {
       setNotRecognizedReason(
         "Er ging iets mis bij het analyseren van je screenshot. Controleer je verbinding en probeer opnieuw."
