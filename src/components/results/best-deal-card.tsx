@@ -12,7 +12,7 @@ export function BestDealCard({
   coupons = demoCoupons,
 }: {
   result: PriceResult;
-  msrp: number;
+  msrp?: number;
   retailers?: Retailer[];
   coupons?: CouponCode[];
 }) {
@@ -20,7 +20,10 @@ export function BestDealCard({
   const coupon = couponForResult(result, coupons);
   const discount = couponDiscountAmount(result, coupons);
   const total = totalPrice(result, coupons);
-  const savings = Math.round((msrp - total) * 100) / 100;
+  // Toon een "normale prijs" en besparing alleen als die daadwerkelijk hoger is dan de
+  // gevonden eindprijs — anders zou het een valse korting suggereren.
+  const hasGenuineMsrp = typeof msrp === "number" && msrp > total;
+  const savings = hasGenuineMsrp ? Math.round((msrp! - total) * 100) / 100 : 0;
 
   return (
     <div className="rounded-3xl border-2 border-dl-green bg-white p-6 shadow-lg shadow-green-900/5">
@@ -43,8 +46,12 @@ export function BestDealCard({
         <div>
           <p className="font-semibold text-dl-text">{result.productName}</p>
           <dl className="mt-3 grid grid-cols-2 gap-y-1.5 text-sm">
-            <dt className="text-slate-500">Normale verkoopprijs</dt>
-            <dd className="text-right text-slate-400 line-through">{formatPrice(msrp)}</dd>
+            {hasGenuineMsrp && (
+              <>
+                <dt className="text-slate-500">Normale verkoopprijs</dt>
+                <dd className="text-right text-slate-400 line-through">{formatPrice(msrp!)}</dd>
+              </>
+            )}
             <dt className="text-slate-500">Aanbiedingsprijs</dt>
             <dd className="text-right font-medium text-dl-text">{formatPrice(result.price)}</dd>
             {coupon && (
@@ -62,7 +69,9 @@ export function BestDealCard({
             <dt className="font-semibold text-dl-text">Eindprijs</dt>
             <dd className="text-right text-lg font-bold text-dl-text">{formatPrice(total)}</dd>
           </dl>
-          <p className="mt-3 text-sm font-semibold text-dl-green">Je bespaart {formatPrice(Math.max(0, savings))}</p>
+          {hasGenuineMsrp && (
+            <p className="mt-3 text-sm font-semibold text-dl-green">Je bespaart {formatPrice(savings)}</p>
+          )}
         </div>
       </div>
 
