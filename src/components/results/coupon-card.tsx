@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type { CouponCode } from "@/lib/types";
+import type { CouponCode, Retailer } from "@/lib/types";
 import { couponStatusText } from "@/lib/types";
 import { demoRetailers } from "@/lib/demo-data";
 import { formatPrice, formatRelativeTime } from "@/lib/utils";
@@ -19,9 +19,15 @@ const statusTone: Record<CouponCode["status"], "green" | "blue" | "gray" | "ambe
   newsletter_only: "amber",
 };
 
-export function CouponCard({ coupon }: { coupon: CouponCode }) {
+export function CouponCard({
+  coupon,
+  retailers = demoRetailers,
+}: {
+  coupon: CouponCode;
+  retailers?: Retailer[];
+}) {
   const [copied, setCopied] = useState(false);
-  const retailer = demoRetailers.find((r) => r.id === coupon.retailerId)!;
+  const retailer = retailers.find((r) => r.id === coupon.retailerId);
 
   const onCopy = async () => {
     try {
@@ -37,7 +43,9 @@ export function CouponCard({ coupon }: { coupon: CouponCode }) {
     <Card className="p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{retailer.name}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            {retailer?.name ?? "Onbekende webshop"}
+          </p>
           <p className="mt-1 font-mono text-lg font-bold text-dl-text">{coupon.code}</p>
         </div>
         <Badge tone={statusTone[coupon.status]}>{couponStatusText[coupon.status]}</Badge>
@@ -68,7 +76,26 @@ export function CouponCard({ coupon }: { coupon: CouponCode }) {
             <dd className="text-right font-medium text-dl-text">{coupon.successRate}%</dd>
           </>
         )}
+        {typeof coupon.confirmedBySources === "number" && (
+          <>
+            <dt>Bevestigd door</dt>
+            <dd className="text-right font-medium text-dl-text">
+              {coupon.confirmedBySources} {coupon.confirmedBySources === 1 ? "bron" : "bronnen"}
+            </dd>
+          </>
+        )}
       </dl>
+
+      {coupon.sourceUrl && (
+        <a
+          href={coupon.sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          className="mt-2 flex items-center gap-1 text-xs text-dl-primary underline"
+        >
+          Bron bekijken <ExternalLink className="h-3 w-3" />
+        </a>
+      )}
 
       <Button size="sm" variant={copied ? "primary" : "outline"} className="mt-4 w-full justify-center" onClick={onCopy}>
         {copied ? (

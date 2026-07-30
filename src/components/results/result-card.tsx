@@ -8,10 +8,11 @@ import { MatchBadge } from "@/components/match-badge";
 import {
   couponDiscountAmount,
   couponForResult,
+  demoCoupons,
   demoRetailers,
   totalPrice,
 } from "@/lib/demo-data";
-import type { PriceResult } from "@/lib/types";
+import type { CouponCode, PriceResult, Retailer } from "@/lib/types";
 import { formatPrice, formatRelativeTime } from "@/lib/utils";
 
 const stockText: Record<PriceResult["stockStatus"], string> = {
@@ -32,17 +33,21 @@ export function ResultCard({
   compareChecked,
   onToggleCompare,
   compareDisabled,
+  retailers = demoRetailers,
+  coupons = demoCoupons,
 }: {
   result: PriceResult;
   highlight?: boolean;
   compareChecked?: boolean;
   onToggleCompare?: () => void;
   compareDisabled?: boolean;
+  retailers?: Retailer[];
+  coupons?: CouponCode[];
 }) {
-  const retailer = demoRetailers.find((r) => r.id === result.retailerId)!;
-  const coupon = couponForResult(result);
-  const discount = couponDiscountAmount(result);
-  const total = totalPrice(result);
+  const retailer = retailers.find((r) => r.id === result.retailerId);
+  const coupon = couponForResult(result, coupons);
+  const discount = couponDiscountAmount(result, coupons);
+  const total = totalPrice(result, coupons);
   const discountPct = result.originalPrice
     ? Math.round((1 - result.price / result.originalPrice) * 100)
     : 0;
@@ -59,14 +64,17 @@ export function ResultCard({
           <div className="flex flex-wrap items-center gap-2">
             <span
               className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white"
-              style={{ backgroundColor: retailer.logoColor }}
+              style={{ backgroundColor: retailer?.logoColor ?? "#667085" }}
               aria-hidden
             >
-              {retailer.logoInitial}
+              {retailer?.logoInitial ?? "?"}
             </span>
-            <span className="text-sm font-semibold text-dl-text">{retailer.name}</span>
-            <span className="text-xs text-slate-400">· {retailer.country}</span>
+            <span className="text-sm font-semibold text-dl-text">{retailer?.name ?? "Onbekende webshop"}</span>
+            {retailer?.country && retailer.country !== "—" && (
+              <span className="text-xs text-slate-400">· {retailer.country}</span>
+            )}
             {result.sponsored && <Badge tone="amber">Gesponsord</Badge>}
+            {result.isLive && <Badge tone="blue">Live gevonden</Badge>}
             <MatchBadge label={result.matchLabel} />
           </div>
 

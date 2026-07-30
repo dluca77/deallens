@@ -54,7 +54,7 @@ export interface Retailer {
   logoInitial: string;
   logoColor: string;
   country: string;
-  rating: number;
+  rating?: number;
 }
 
 export interface CouponCode {
@@ -68,6 +68,11 @@ export interface CouponCode {
   lastChecked: string;
   successRate: number;
   status: CouponStatus;
+  /** Aanwezig bij live (via websearch) gevonden codes: waar de code is teruggevonden. */
+  sourceUrl?: string;
+  /** Aantal onafhankelijke bronnen dat deze code recent bevestigde (alleen bij live data). */
+  confirmedBySources?: number;
+  isLive?: boolean;
 }
 
 export interface PriceResult {
@@ -88,6 +93,7 @@ export interface PriceResult {
   sponsored?: boolean;
   lastChecked: string;
   url: string;
+  isLive?: boolean;
 }
 
 export interface SavedProduct {
