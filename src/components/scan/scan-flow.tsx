@@ -153,9 +153,7 @@ export function ScanFlow() {
       const data = await response.json();
 
       if (!response.ok) {
-        // TIJDELIJK voor livedebug — weer verwijderen zodra de oorzaak gevonden is.
-        const reason = data.debug ? `${data.error} (debug: ${data.debug})` : data.error ?? "Product niet herkend.";
-        setNotRecognizedReason(reason);
+        setNotRecognizedReason(data.error ?? "Product niet herkend.");
         setDetected(null);
         return;
       }

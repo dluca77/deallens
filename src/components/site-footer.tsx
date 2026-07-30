@@ -6,7 +6,7 @@ export function SiteFooter() {
       <div className="mx-auto max-w-7xl px-4 py-10 md:px-8">
         <div className="grid gap-8 md:grid-cols-4">
           <div>
-            <img src="/logo.png" alt="DealLens AI" className="h-6 w-auto" />
+            <img src="/logo.png" alt="DealLens AI" className="h-9 w-auto" />
             <p className="mt-3 text-sm text-slate-500">
               Zie je iets leuks? Screenshot het en vind de laagste prijs.
             </p>
