@@ -13,6 +13,7 @@ import { FeedbackButtons } from "@/components/results/feedback-buttons";
 import { MatchBadge } from "@/components/match-badge";
 import {
   bestDealResult,
+  buildDemoResultsForProduct,
   demoAlternatives,
   demoCoupons,
   demoPriceResults,
@@ -22,8 +23,10 @@ import {
 import { cn } from "@/lib/utils";
 import { DEALLENS_STORAGE_KEY } from "@/components/scan/scan-flow";
 import type { VisionProductResult } from "@/lib/vision";
+import type { PriceResult } from "@/lib/types";
 
 type StoredDetectedProduct = VisionProductResult & { image: string; source: "ai" | "demo" };
+export const DEALLENS_RESULTS_STORAGE_KEY = "deallens:lastResultSet";
 
 type SortKey = "price" | "discount" | "delivery" | "match" | "reliable";
 
@@ -77,10 +80,35 @@ export function ResultsExplorer() {
         confidence: demoProduct.confidence,
       };
 
-  const best = bestDealResult();
+  const { activeResults, activeAlternatives } = useMemo(() => {
+    if (!detected) return { activeResults: demoPriceResults, activeAlternatives: demoAlternatives };
+    const generated = buildDemoResultsForProduct({
+      brand: detected.brand,
+      name: detected.name,
+      image: detected.image,
+      color: detected.color,
+      size: detected.size,
+      category: detected.category,
+    });
+    return { activeResults: generated.priceResults, activeAlternatives: generated.alternatives };
+  }, [detected]);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        DEALLENS_RESULTS_STORAGE_KEY,
+        JSON.stringify([...activeResults, ...activeAlternatives])
+      );
+    } catch {
+      // sessionStorage niet beschikbaar; vergelijkingspagina valt dan terug op statische demodata.
+    }
+  }, [activeResults, activeAlternatives]);
+
+  const best = bestDealResult(activeResults);
+  const productMsrp = detected ? best.originalPrice ?? best.price : demoProduct.msrp;
 
   const filtered = useMemo(() => {
-    let list = [...demoPriceResults];
+    let list: PriceResult[] = [...activeResults];
     if (onlyExact) list = list.filter((r) => r.matchLabel === "exact");
     if (onlyStock) list = list.filter((r) => r.stockStatus !== "out_of_stock");
     if (onlyFreeShipping) list = list.filter((r) => r.shippingCost === 0);
@@ -106,7 +134,7 @@ export function ResultsExplorer() {
       }
     });
     return list;
-  }, [sort, onlyExact, onlyStock, onlyFreeShipping, onlyCoupon]);
+  }, [activeResults, sort, onlyExact, onlyStock, onlyFreeShipping, onlyCoupon]);
 
   const toggleCompare = (id: string) => {
     setCompareIds((prev) =>
@@ -201,7 +229,7 @@ export function ResultsExplorer() {
             </label>
           </div>
 
-          <BestDealCard result={best} msrp={demoProduct.msrp} />
+          <BestDealCard result={best} msrp={productMsrp} />
 
           <div className="mt-6 space-y-4">
             {filtered
@@ -254,7 +282,7 @@ export function ResultsExplorer() {
               product.
             </p>
             <div className="mt-4 space-y-4">
-              {demoAlternatives.map((alt) => (
+              {activeAlternatives.map((alt) => (
                 <div key={alt.id}>
                   <div className="mb-1 flex items-center gap-2">
                     <MatchBadge label="alternative" />

@@ -222,8 +222,8 @@ export const demoAlternatives: PriceResult[] = [
   },
 ];
 
-export function bestDealResult(): PriceResult {
-  const candidates = demoPriceResults.filter((r) => !r.sponsored);
+export function bestDealResult(list: PriceResult[] = demoPriceResults): PriceResult {
+  const candidates = list.filter((r) => !r.sponsored);
   return candidates.reduce((best, current) => {
     const bestTotal = totalPrice(best);
     const currentTotal = totalPrice(current);
@@ -233,10 +233,170 @@ export function bestDealResult(): PriceResult {
   }, candidates[0]);
 }
 
-export function cheapestAlternative(): PriceResult {
-  return [...demoPriceResults]
-    .filter((r) => r.matchLabel !== "exact")
-    .sort((a, b) => totalPrice(a) - totalPrice(b))[0];
+export function cheapestAlternative(list: PriceResult[] = demoPriceResults): PriceResult {
+  return [...list].filter((r) => r.matchLabel !== "exact").sort((a, b) => totalPrice(a) - totalPrice(b))[0];
+}
+
+function seedFromString(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash * 31 + value.charCodeAt(i)) | 0;
+  }
+  return hash;
+}
+
+function mulberry32(seed: number) {
+  let state = seed;
+  return () => {
+    state |= 0;
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+interface RecognizedProductLike {
+  brand: string;
+  name: string;
+  image: string;
+  color?: string | null;
+  size?: string | null;
+  category?: string | null;
+}
+
+/**
+ * Genereert consistente (maar illustratieve) demo-prijsresultaten rond een écht herkend product,
+ * zodat de resultatenpagina niet langer altijd de vaste sneaker-demodata toont voor een ander
+ * product. Prijzen en webshops blijven voorbeelddata totdat er een live shopping-API gekoppeld is.
+ */
+export function buildDemoResultsForProduct(product: RecognizedProductLike): {
+  priceResults: PriceResult[];
+  alternatives: PriceResult[];
+} {
+  const rand = mulberry32(seedFromString(`${product.brand}-${product.name}`));
+  const basePrice = Math.round((29 + rand() * 220) * 100) / 100;
+  const now = new Date().toISOString();
+  const variants = product.size ? [product.size] : ["Eenheidsmaat"];
+
+  const retailerConfigs: {
+    discountPct: number;
+    shippingCost: number;
+    deliveryEstimate: string;
+    stockStatus: PriceResult["stockStatus"];
+    matchLabel: PriceResult["matchLabel"];
+    matchConfidence: number;
+    couponId?: string;
+    sponsored?: boolean;
+  }[] = [
+    {
+      discountPct: 0.24,
+      shippingCost: 0,
+      deliveryEstimate: "1-2 werkdagen",
+      stockStatus: "in_stock",
+      matchLabel: "exact",
+      matchConfidence: 97,
+      couponId: demoCoupons[0]?.id,
+    },
+    {
+      discountPct: 0.18,
+      shippingCost: 4.95,
+      deliveryEstimate: "2-4 werkdagen",
+      stockStatus: "in_stock",
+      matchLabel: "exact",
+      matchConfidence: 95,
+    },
+    {
+      discountPct: 0.12,
+      shippingCost: 0,
+      deliveryEstimate: "3-5 werkdagen",
+      stockStatus: "low_stock",
+      matchLabel: "probable",
+      matchConfidence: 89,
+      couponId: demoCoupons[2]?.id,
+    },
+    {
+      discountPct: 0.08,
+      shippingCost: 3.95,
+      deliveryEstimate: "5-8 werkdagen",
+      stockStatus: "in_stock",
+      matchLabel: "probable",
+      matchConfidence: 86,
+      couponId: demoCoupons[3]?.id,
+      sponsored: true,
+    },
+    {
+      discountPct: 0.34,
+      shippingCost: 2.95,
+      deliveryEstimate: "3-6 werkdagen",
+      stockStatus: "in_stock",
+      matchLabel: "refurbished",
+      matchConfidence: 74,
+    },
+  ];
+
+  const priceResults: PriceResult[] = demoRetailers.map((retailer, i) => {
+    const config = retailerConfigs[i];
+    const price = Math.round(basePrice * (1 - config.discountPct) * 100) / 100;
+    return {
+      id: `dyn-${i}-${retailer.id}`,
+      retailerId: retailer.id,
+      productImage: product.image,
+      productName: `${product.name}${product.color ? ` - ${product.color}` : ""}`,
+      price,
+      originalPrice: basePrice,
+      shippingCost: config.shippingCost,
+      deliveryEstimate: config.deliveryEstimate,
+      stockStatus: config.stockStatus,
+      variants,
+      couponId: config.couponId,
+      matchLabel: config.matchLabel,
+      matchConfidence: config.matchConfidence,
+      matchReason: "Geschat op basis van herkende merk- en productkenmerken (voorbeelddata, nog geen live shopping-bron)",
+      sponsored: config.sponsored,
+      lastChecked: now,
+      url: `https://example.com/voorbeeldwinkel/${retailer.id}`,
+    };
+  });
+
+  const alternatives: PriceResult[] = [
+    {
+      id: "dyn-alt-1",
+      retailerId: demoRetailers[3].id,
+      productImage: product.image,
+      productName: `Vergelijkbaar model van ${product.brand || "hetzelfde merk"}`,
+      price: Math.round(basePrice * 0.82 * 100) / 100,
+      originalPrice: Math.round(basePrice * 1.1 * 100) / 100,
+      shippingCost: 0,
+      deliveryEstimate: "2-3 werkdagen",
+      stockStatus: "in_stock",
+      variants,
+      matchLabel: "alternative",
+      matchConfidence: 84,
+      matchReason: "Zelfde merk en prijsklasse, vergelijkbare kenmerken (voorbeelddata)",
+      lastChecked: now,
+      url: `https://example.com/voorbeeldwinkel/${demoRetailers[3].id}-alternatief`,
+    },
+    {
+      id: "dyn-alt-2",
+      retailerId: demoRetailers[4].id,
+      productImage: product.image,
+      productName: `Vergelijkbaar alternatief - ${product.category ?? "zelfde categorie"}`,
+      price: Math.round(basePrice * 0.66 * 100) / 100,
+      originalPrice: Math.round(basePrice * 0.95 * 100) / 100,
+      shippingCost: 0,
+      deliveryEstimate: "1-2 werkdagen",
+      stockStatus: "in_stock",
+      variants,
+      matchLabel: "alternative",
+      matchConfidence: 77,
+      matchReason: "Vergelijkbaar type product en kleur, ander merk (voorbeelddata)",
+      lastChecked: now,
+      url: `https://example.com/voorbeeldwinkel/${demoRetailers[4].id}-alternatief`,
+    },
+  ];
+
+  return { priceResults, alternatives };
 }
 
 export function couponForResult(result: PriceResult): CouponCode | undefined {
