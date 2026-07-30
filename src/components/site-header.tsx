@@ -21,8 +21,8 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-dl-border bg-white/85 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-8">
-        <Link href="/" className="flex items-center">
-          <img src="/logo.png" alt="DealLens AI" className="h-7 w-auto md:h-8" />
+        <Link href="/" className="flex shrink-0 items-center">
+          <img src="/logo.png" alt="DealLens AI" className="h-10 w-auto md:h-9" />
         </Link>
 
         <nav aria-label="Hoofdnavigatie" className="hidden items-center gap-6 md:flex">

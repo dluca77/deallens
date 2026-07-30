@@ -9,6 +9,7 @@ import { Card, CardBody } from "@/components/ui/card";
 import { BestDealCard } from "@/components/results/best-deal-card";
 import { ResultCard } from "@/components/results/result-card";
 import { CouponCard } from "@/components/results/coupon-card";
+import { LiveSearchProgress } from "@/components/results/live-search-progress";
 import { FeedbackButtons } from "@/components/results/feedback-buttons";
 import { MatchBadge } from "@/components/match-badge";
 import {
@@ -326,9 +327,8 @@ export function ResultsExplorer() {
 
           {searchStatus === "loading" ? (
             <Card>
-              <CardBody className="flex flex-col items-center gap-3 py-14 text-center">
-                <Loader2 className="h-8 w-8 animate-spin text-dl-primary" aria-hidden />
-                <p className="text-sm text-slate-500">Even geduld, we doorzoeken het web naar de beste deal…</p>
+              <CardBody>
+                <LiveSearchProgress />
               </CardBody>
             </Card>
           ) : (
