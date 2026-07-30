@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Menu, Scan, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { ButtonLink } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -21,11 +21,8 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-dl-border bg-white/85 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-8">
-        <Link href="/" className="flex items-center gap-2 font-bold text-dl-navy">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-dl-navy text-white">
-            <Scan className="h-5 w-5" aria-hidden />
-          </span>
-          <span className="text-lg">DealLens AI</span>
+        <Link href="/" className="flex items-center">
+          <img src="/logo.png" alt="DealLens AI" className="h-7 w-auto md:h-8" />
         </Link>
 
         <nav aria-label="Hoofdnavigatie" className="hidden items-center gap-6 md:flex">
