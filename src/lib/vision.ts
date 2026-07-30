@@ -7,11 +7,14 @@ export interface VisionProductResult {
   category: string;
   description: string;
   confidence: number;
+  referencePrice: number | null;
 }
 
 const SYSTEM_PROMPT = `Je bent de productherkenningsmodule van DealLens AI. Je krijgt een screenshot van een webshop,
 sociale media-advertentie of productpagina. Herken het hoofdproduct in de afbeelding zo nauwkeurig mogelijk
 op basis van merklogo, productnaam, tekst op de afbeelding, kleur, materiaal en categorie.
+
+Let ook goed op of er ergens een prijs zichtbaar is in de afbeelding (bijvoorbeeld "€ 17,49" of "$24.99").
 
 Antwoord ALLEEN met geldige JSON in exact dit formaat, zonder markdown-codeblok en zonder extra tekst:
 {
@@ -22,7 +25,12 @@ Antwoord ALLEEN met geldige JSON in exact dit formaat, zonder markdown-codeblok 
   "size": string of null,
   "category": string,
   "description": string (max 2 zinnen, in het Nederlands),
-  "confidence": number (0-100, hoe zeker je bent van deze herkenning)
+  "confidence": number (0-100, hoe zeker je bent van deze herkenning),
+  "referencePrice": number of null — gebruik prioriteit in deze volgorde:
+    1. Een prijs die letterlijk zichtbaar is in de afbeelding, omgerekend naar euro's als dat nodig is.
+    2. Als er geen prijs zichtbaar is: jouw beste schatting van de gangbare verkoopprijs in euro's voor dit
+       specifieke type product, gebaseerd op merk, categorie en materiaal.
+    Geef altijd een getal terug tenzij je totaal geen inschatting kunt maken; gebruik dan null.
 }
 
 Als je geen duidelijk product kunt herkennen, geef dan "confidence" onder de 40 terug.`;
@@ -90,6 +98,11 @@ export async function recognizeProduct(
     throw new Error("AI-antwoord miste verplichte velden.");
   }
 
+  const referencePrice =
+    typeof parsed.referencePrice === "number" && Number.isFinite(parsed.referencePrice) && parsed.referencePrice > 0
+      ? parsed.referencePrice
+      : null;
+
   return {
     brand: parsed.brand,
     name: parsed.name,
@@ -99,5 +112,6 @@ export async function recognizeProduct(
     category: parsed.category ?? "Onbekend",
     description: parsed.description ?? "",
     confidence: Math.max(0, Math.min(100, Math.round(parsed.confidence))),
+    referencePrice,
   };
 }

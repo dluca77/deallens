@@ -48,6 +48,7 @@ const demoFallbackProduct: DetectedProduct = {
   description:
     "Klassieke Nike Air Max 95 in de Essential-uitvoering, met gelaagd bovenwerk en zichtbare Air-zool.",
   confidence: 94,
+  referencePrice: 189.99,
   image: "https://placehold.co/600x600/101828/FFFFFF?text=Nike+Air+Max+95",
   source: "demo",
 };
@@ -360,6 +361,7 @@ export function ScanFlow() {
               category: "",
               description: "Handmatig ingevoerd product.",
               confidence: 0,
+              referencePrice: null,
               image: image ?? demoFallbackProduct.image,
               source: "demo",
             };
