@@ -77,57 +77,79 @@ export function ResultsExplorer() {
     setSearchStatus("loading");
     setSearchError(null);
 
-    fetch("/api/search-prices", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        brand: detected.brand,
-        name: detected.name,
-        color: detected.color,
-        size: detected.size,
-        category: detected.category,
-        referencePrice: detected.referencePrice,
-      }),
-    })
-      .then(async (response) => {
-        const data = await response.json();
-        if (cancelled) return;
-        if (!response.ok) {
-          setSearchStatus("error");
-          // TIJDELIJK voor livedebug — weer verwijderen zodra de oorzaak gevonden is.
-          setSearchError(data.debug ? `${data.error} (debug: ${data.debug})` : data.error ?? "Live prijzen zoeken is mislukt.");
-          return;
-        }
-        if (!data.priceResults || data.priceResults.length === 0) {
-          setSearchStatus("empty");
-          return;
-        }
-        const withImages: PriceResult[] = data.priceResults
-          .map((r: PriceResult) => ({
-            ...r,
-            productImage: r.productImage || detected.image,
-          }))
-          // Nooit een "gevonden" prijs tonen die hoger is dan de prijs die de gebruiker al zag
-          // op de originele screenshot — dat is geen deal.
-          .filter((r: PriceResult) =>
-            detected.referencePrice ? r.price + r.shippingCost <= detected.referencePrice : true
-          );
-
-        if (withImages.length === 0) {
-          setSearchStatus("no_cheaper");
-          return;
-        }
-        setLiveRetailers(data.retailers ?? []);
-        setLivePriceResults(withImages);
-        setLiveCoupons(data.coupons ?? []);
-        setSearchStatus("success");
-      })
-      .catch(() => {
+    const runSearch = async (attempt: number): Promise<void> => {
+      let response: Response;
+      let data: {
+        error?: string;
+        debug?: string;
+        priceResults?: PriceResult[];
+        retailers?: Retailer[];
+        coupons?: CouponCode[];
+      };
+      try {
+        response = await fetch("/api/search-prices", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            brand: detected.brand,
+            name: detected.name,
+            color: detected.color,
+            size: detected.size,
+            category: detected.category,
+            referencePrice: detected.referencePrice,
+          }),
+        });
+        data = await response.json();
+      } catch {
         if (!cancelled) {
           setSearchStatus("error");
           setSearchError("Er ging iets mis bij het zoeken naar actuele prijzen.");
         }
-      });
+        return;
+      }
+
+      if (cancelled) return;
+
+      if (!response.ok) {
+        setSearchStatus("error");
+        // TIJDELIJK voor livedebug — weer verwijderen zodra de oorzaak gevonden is.
+        setSearchError(data.debug ? `${data.error} (debug: ${data.debug})` : data.error ?? "Live prijzen zoeken is mislukt.");
+        return;
+      }
+
+      if (!data.priceResults || data.priceResults.length === 0) {
+        // Live websearch is niet altijd raak in één poging; probeer het automatisch nog één keer
+        // voordat we teruggrijpen op voorbeelddata.
+        if (attempt < 2) {
+          await runSearch(attempt + 1);
+          return;
+        }
+        setSearchStatus("empty");
+        return;
+      }
+
+      const withImages: PriceResult[] = data.priceResults
+        .map((r: PriceResult) => ({
+          ...r,
+          productImage: r.productImage || detected.image,
+        }))
+        // Nooit een "gevonden" prijs tonen die hoger is dan de prijs die de gebruiker al zag
+        // op de originele screenshot — dat is geen deal.
+        .filter((r: PriceResult) =>
+          detected.referencePrice ? r.price + r.shippingCost <= detected.referencePrice : true
+        );
+
+      if (withImages.length === 0) {
+        setSearchStatus("no_cheaper");
+        return;
+      }
+      setLiveRetailers(data.retailers ?? []);
+      setLivePriceResults(withImages);
+      setLiveCoupons(data.coupons ?? []);
+      setSearchStatus("success");
+    };
+
+    runSearch(1);
 
     return () => {
       cancelled = true;
