@@ -33,7 +33,7 @@ export const DEALLENS_RETAILERS_STORAGE_KEY = "deallens:lastRetailers";
 export const DEALLENS_COUPONS_STORAGE_KEY = "deallens:lastCoupons";
 
 type SortKey = "price" | "discount" | "delivery" | "match" | "reliable";
-type SearchStatus = "idle" | "loading" | "success" | "empty" | "error";
+type SearchStatus = "idle" | "loading" | "success" | "empty" | "error" | "no_cheaper";
 
 const sortOptions: { key: SortKey; label: string }[] = [
   { key: "price", label: "Laagste totaalprijs" },
@@ -102,10 +102,21 @@ export function ResultsExplorer() {
           setSearchStatus("empty");
           return;
         }
-        const withImages: PriceResult[] = data.priceResults.map((r: PriceResult) => ({
-          ...r,
-          productImage: r.productImage || detected.image,
-        }));
+        const withImages: PriceResult[] = data.priceResults
+          .map((r: PriceResult) => ({
+            ...r,
+            productImage: r.productImage || detected.image,
+          }))
+          // Nooit een "gevonden" prijs tonen die hoger is dan de prijs die de gebruiker al zag
+          // op de originele screenshot — dat is geen deal.
+          .filter((r: PriceResult) =>
+            detected.referencePrice ? r.price + r.shippingCost <= detected.referencePrice : true
+          );
+
+        if (withImages.length === 0) {
+          setSearchStatus("no_cheaper");
+          return;
+        }
         setLiveRetailers(data.retailers ?? []);
         setLivePriceResults(withImages);
         setLiveCoupons(data.coupons ?? []);
@@ -148,9 +159,12 @@ export function ResultsExplorer() {
   // anders zie je eerst kortingscodes van "Webshop A/B/C" verschijnen voordat de echte
   // resultaten binnen zijn.
   const isSearching = detected?.source === "ai" && searchStatus === "loading";
+  // Als er wél live resultaten gevonden zijn, maar geen enkele goedkoper is dan de prijs die de
+  // gebruiker al zag, tonen we geen (nep-goedkopere) voorbeelddata — dat zou de kernbelofte breken.
+  const noCheaperFound = searchStatus === "no_cheaper";
 
   const { activeResults, activeAlternatives, activeRetailers, activeCoupons } = useMemo(() => {
-    if (isSearching) {
+    if (isSearching || noCheaperFound) {
       return {
         activeResults: [] as PriceResult[],
         activeAlternatives: [] as PriceResult[],
@@ -189,7 +203,7 @@ export function ResultsExplorer() {
       activeRetailers: demoRetailers,
       activeCoupons: demoCoupons,
     };
-  }, [isSearching, isLive, livePriceResults, liveRetailers, liveCoupons, detected]);
+  }, [isSearching, noCheaperFound, isLive, livePriceResults, liveRetailers, liveCoupons, detected]);
 
   useEffect(() => {
     try {
@@ -286,6 +300,23 @@ export function ResultsExplorer() {
               </p>
             </div>
           )}
+          {noCheaperFound && (
+            <Card className="mb-6">
+              <CardBody className="text-center">
+                <TriangleAlert className="mx-auto h-6 w-6 text-amber-500" aria-hidden />
+                <h2 className="mt-2 text-lg font-bold text-dl-text">Geen goedkopere prijs gevonden</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  We hebben live gezocht bij webshops, maar geen enkele prijs was lager dan de
+                  {detected?.referencePrice ? ` €${detected.referencePrice.toFixed(2).replace(".", ",")} ` : " prijs "}
+                  die je al op de originele pagina zag. We tonen daarom geen resultaten — dat zou geen
+                  echte deal zijn.
+                </p>
+                <ButtonLink href="/scan" variant="outline" size="sm" className="mt-4">
+                  Ander product proberen
+                </ButtonLink>
+              </CardBody>
+            </Card>
+          )}
           {detected && searchStatus === "idle" && detected.source === "demo" && (
             <div className="mb-4 flex items-start gap-2 rounded-xl bg-blue-50 p-3 text-xs text-dl-primary">
               <Sparkles className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
@@ -332,7 +363,7 @@ export function ResultsExplorer() {
                 <LiveSearchProgress />
               </CardBody>
             </Card>
-          ) : (
+          ) : noCheaperFound ? null : (
             <>
               <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap gap-2 lg:hidden">
@@ -399,6 +430,7 @@ export function ResultsExplorer() {
             </div>
           )}
 
+          {!noCheaperFound && (
           <section className="mt-10">
             <h2 className="text-xl font-bold text-dl-navy">Kortingscodes</h2>
             {isSearching ? (
@@ -428,6 +460,7 @@ export function ResultsExplorer() {
               meerdere bronnen.
             </p>
           </section>
+          )}
 
           {activeAlternatives.length > 0 && (
             <section className="mt-10">
