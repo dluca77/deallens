@@ -185,10 +185,14 @@ export function ScanFlow() {
 
   const goToResults = () => {
     if (detected && typeof window !== "undefined") {
-      window.sessionStorage.setItem(
-        DEALLENS_STORAGE_KEY,
-        JSON.stringify({ ...detected, name: editableName || `${detected.brand} ${detected.name}` })
-      );
+      try {
+        window.sessionStorage.setItem(
+          DEALLENS_STORAGE_KEY,
+          JSON.stringify({ ...detected, name: editableName || `${detected.brand} ${detected.name}` })
+        );
+      } catch {
+        // sessionStorage kan vol zitten (grote foto) of geblokkeerd zijn; ga toch door naar de resultaten.
+      }
     }
     router.push("/results");
   };
