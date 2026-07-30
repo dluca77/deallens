@@ -20,11 +20,14 @@ const SYSTEM_PROMPT = `Je bent de shopping-researchmodule van DealLens AI. Je kr
 web-zoektool ECHTE, actuele informatie opzoeken. Verzin nooit gegevens.
 
 Taak 1 — Webshops en prijzen:
-Zoek naar webshops die dit product daadwerkelijk verkopen. Voor elke webshop die je vindt en kunt bevestigen:
-merk/webshopnaam, domeinnaam, directe productprijs (in euro; converteer andere valuta), verzendkosten indien
-vermeld, geschatte levertijd indien vermeld, voorraadstatus indien vermeld, en de directe URL naar de
-productpagina. Neem alleen webshops op waarvoor je een zoekresultaat hebt gezien dat het product en een prijs
-noemt. Vind maximaal 5 webshops.
+Zoek naar webshops die dit product daadwerkelijk verkopen. Stop niet na de eerste de beste treffer: voer
+meerdere verschillende zoekopdrachten uit (bijv. merk + productnaam, merk + productnaam + "prijs", de officiële
+merkwebsite specifiek, en eventueel een prijsvergelijkingssite) zodat je minimaal 2-3 verschillende webshops
+probeert te vinden voordat je stopt, tenzij je zoekbudget op is. Voor elke webshop die je vindt en kunt
+bevestigen: merk/webshopnaam, domeinnaam, directe productprijs (in euro; converteer andere valuta),
+verzendkosten indien vermeld, geschatte levertijd indien vermeld, voorraadstatus indien vermeld, en de directe
+URL naar de productpagina. Neem alleen webshops op waarvoor je een zoekresultaat hebt gezien dat het product en
+een prijs noemt. Vind maximaal 5 webshops.
 
 Taak 2 — Kortingscodes:
 Zoek naar kortingscodes voor dit merk of deze specifieke webshops. Voor elke code die je vindt: de code zelf,
@@ -127,7 +130,7 @@ export async function liveSearchForProduct(
       model: "claude-haiku-4-5-20251001",
       max_tokens: 2000,
       system: SYSTEM_PROMPT,
-      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }],
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 }],
       messages: [
         {
           role: "user",
