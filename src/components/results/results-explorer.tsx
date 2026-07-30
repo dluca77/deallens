@@ -142,8 +142,20 @@ export function ResultsExplorer() {
       };
 
   const isLive = searchStatus === "success" && livePriceResults.length > 0;
+  // Terwijl de live zoekopdracht nog loopt mag er geen (voorbeeld)data getoond worden —
+  // anders zie je eerst kortingscodes van "Webshop A/B/C" verschijnen voordat de echte
+  // resultaten binnen zijn.
+  const isSearching = detected?.source === "ai" && searchStatus === "loading";
 
   const { activeResults, activeAlternatives, activeRetailers, activeCoupons } = useMemo(() => {
+    if (isSearching) {
+      return {
+        activeResults: [] as PriceResult[],
+        activeAlternatives: [] as PriceResult[],
+        activeRetailers: [] as Retailer[],
+        activeCoupons: [] as CouponCode[],
+      };
+    }
     if (isLive) {
       return {
         activeResults: livePriceResults,
@@ -175,7 +187,7 @@ export function ResultsExplorer() {
       activeRetailers: demoRetailers,
       activeCoupons: demoCoupons,
     };
-  }, [isLive, livePriceResults, liveRetailers, liveCoupons, detected]);
+  }, [isSearching, isLive, livePriceResults, liveRetailers, liveCoupons, detected]);
 
   useEffect(() => {
     try {
@@ -388,18 +400,26 @@ export function ResultsExplorer() {
 
           <section className="mt-10">
             <h2 className="text-xl font-bold text-dl-navy">Kortingscodes</h2>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {activeCoupons.map((c) => (
-                <CouponCard key={c.id} coupon={c} retailers={activeRetailers} />
-              ))}
-              {activeCoupons.length === 0 && (
-                <Card>
-                  <CardBody className="text-sm text-slate-500">
-                    We hebben momenteel geen betrouwbare kortingscode voor deze webshops gevonden.
-                  </CardBody>
-                </Card>
-              )}
-            </div>
+            {isSearching ? (
+              <Card className="mt-4">
+                <CardBody className="flex items-center gap-2 text-sm text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Kortingscodes zoeken…
+                </CardBody>
+              </Card>
+            ) : (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {activeCoupons.map((c) => (
+                  <CouponCard key={c.id} coupon={c} retailers={activeRetailers} />
+                ))}
+                {activeCoupons.length === 0 && (
+                  <Card>
+                    <CardBody className="text-sm text-slate-500">
+                      We hebben momenteel geen betrouwbare kortingscode voor deze webshops gevonden.
+                    </CardBody>
+                  </Card>
+                )}
+              </div>
+            )}
             <p className="mt-3 flex items-start gap-1.5 text-xs text-slate-400">
               <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               DealLens AI garandeert nooit dat een kortingscode werkt wanneer deze niet daadwerkelijk gecontroleerd
