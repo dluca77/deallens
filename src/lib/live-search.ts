@@ -124,10 +124,10 @@ export async function liveSearchForProduct(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-5",
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 2000,
       system: SYSTEM_PROMPT,
-      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 8 }],
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }],
       messages: [
         {
           role: "user",
