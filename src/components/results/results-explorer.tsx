@@ -94,7 +94,8 @@ export function ResultsExplorer() {
         if (cancelled) return;
         if (!response.ok) {
           setSearchStatus("error");
-          setSearchError(data.error ?? "Live prijzen zoeken is mislukt.");
+          // TIJDELIJK voor livedebug — weer verwijderen zodra de oorzaak gevonden is.
+          setSearchError(data.debug ? `${data.error} (debug: ${data.debug})` : data.error ?? "Live prijzen zoeken is mislukt.");
           return;
         }
         if (!data.priceResults || data.priceResults.length === 0) {

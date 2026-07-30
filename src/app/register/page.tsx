@@ -9,7 +9,7 @@ export default function RegisterPage() {
     <main className="flex min-h-screen flex-1 items-center justify-center bg-dl-bg px-4 py-12">
       <div className="w-full max-w-sm">
         <Link href="/" className="mb-8 flex items-center justify-center">
-          <img src="/logo.png" alt="DealLens AI" className="h-8 w-auto" />
+          <img src="/logo.png" alt="DealLens AI" className="h-12 w-auto" />
         </Link>
         <Card>
           <CardBody>

@@ -46,8 +46,13 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("Live prijzen zoeken mislukt:", error);
+    const detail = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: "We konden geen actuele prijzen vinden. Probeer het later opnieuw." },
+      {
+        error: "We konden geen actuele prijzen vinden. Probeer het later opnieuw.",
+        // TIJDELIJK voor livedebug — weer verwijderen zodra de oorzaak gevonden is.
+        debug: detail,
+      },
       { status: 502 }
     );
   }
