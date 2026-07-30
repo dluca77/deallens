@@ -89,6 +89,7 @@ export function ResultsExplorer() {
       color: detected.color,
       size: detected.size,
       category: detected.category,
+      referencePrice: detected.referencePrice,
     });
     return { activeResults: generated.priceResults, activeAlternatives: generated.alternatives };
   }, [detected]);

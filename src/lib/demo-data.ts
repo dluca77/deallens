@@ -263,19 +263,24 @@ interface RecognizedProductLike {
   color?: string | null;
   size?: string | null;
   category?: string | null;
+  referencePrice?: number | null;
 }
 
 /**
  * Genereert consistente (maar illustratieve) demo-prijsresultaten rond een écht herkend product,
  * zodat de resultatenpagina niet langer altijd de vaste sneaker-demodata toont voor een ander
  * product. Prijzen en webshops blijven voorbeelddata totdat er een live shopping-API gekoppeld is.
+ * Wanneer de AI een referentieprijs teruggaf (zichtbaar op de screenshot of een schatting), wordt
+ * die als anker gebruikt zodat de voorbeeldprijzen realistisch aanvoelen voor dit type product.
  */
 export function buildDemoResultsForProduct(product: RecognizedProductLike): {
   priceResults: PriceResult[];
   alternatives: PriceResult[];
 } {
   const rand = mulberry32(seedFromString(`${product.brand}-${product.name}`));
-  const basePrice = Math.round((29 + rand() * 220) * 100) / 100;
+  const basePrice = product.referencePrice
+    ? Math.round(Math.max(1, product.referencePrice) * 100) / 100
+    : Math.round((29 + rand() * 220) * 100) / 100;
   const now = new Date().toISOString();
   const variants = product.size ? [product.size] : ["Eenheidsmaat"];
 
