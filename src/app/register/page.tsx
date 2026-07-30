@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Scan } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 
@@ -9,11 +8,8 @@ export default function RegisterPage() {
   return (
     <main className="flex min-h-screen flex-1 items-center justify-center bg-dl-bg px-4 py-12">
       <div className="w-full max-w-sm">
-        <Link href="/" className="mb-8 flex items-center justify-center gap-2 font-bold text-dl-navy">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-dl-navy text-white">
-            <Scan className="h-5 w-5" />
-          </span>
-          DealLens AI
+        <Link href="/" className="mb-8 flex items-center justify-center">
+          <img src="/logo.png" alt="DealLens AI" className="h-8 w-auto" />
         </Link>
         <Card>
           <CardBody>
