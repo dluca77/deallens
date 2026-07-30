@@ -11,12 +11,17 @@ import { MatchBadge } from "@/components/match-badge";
 import {
   couponForResult,
   demoAlternatives,
+  demoCoupons,
   demoPriceResults,
   demoRetailers,
   totalPrice,
 } from "@/lib/demo-data";
-import { DEALLENS_RESULTS_STORAGE_KEY } from "@/components/results/results-explorer";
-import type { PriceResult } from "@/lib/types";
+import {
+  DEALLENS_COUPONS_STORAGE_KEY,
+  DEALLENS_RESULTS_STORAGE_KEY,
+  DEALLENS_RETAILERS_STORAGE_KEY,
+} from "@/components/results/results-explorer";
+import type { CouponCode, PriceResult, Retailer } from "@/lib/types";
 import { formatPrice } from "@/lib/utils";
 
 export default function ComparePage() {
@@ -43,14 +48,26 @@ function CompareTable() {
   const searchParams = useSearchParams();
   const ids = searchParams.get("ids");
   const [pool, setPool] = useState<PriceResult[]>([...demoPriceResults, ...demoAlternatives]);
+  const [retailers, setRetailers] = useState<Retailer[]>(demoRetailers);
+  const [coupons, setCoupons] = useState<CouponCode[]>(demoCoupons);
 
   useEffect(() => {
     try {
-      const raw = window.sessionStorage.getItem(DEALLENS_RESULTS_STORAGE_KEY);
-      if (raw) {
-        const stored = JSON.parse(raw) as PriceResult[];
+      const rawResults = window.sessionStorage.getItem(DEALLENS_RESULTS_STORAGE_KEY);
+      if (rawResults) {
+        const stored = JSON.parse(rawResults) as PriceResult[];
         // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of a browser API unavailable during SSR/prerender
         setPool((prev) => [...stored, ...prev]);
+      }
+      const rawRetailers = window.sessionStorage.getItem(DEALLENS_RETAILERS_STORAGE_KEY);
+      if (rawRetailers) {
+        const stored = JSON.parse(rawRetailers) as Retailer[];
+        setRetailers((prev) => [...stored, ...prev]);
+      }
+      const rawCoupons = window.sessionStorage.getItem(DEALLENS_COUPONS_STORAGE_KEY);
+      if (rawCoupons) {
+        const stored = JSON.parse(rawCoupons) as CouponCode[];
+        setCoupons((prev) => [...stored, ...prev]);
       }
     } catch {
       // sessionStorage niet beschikbaar; val terug op de statische demodata.
@@ -63,21 +80,27 @@ function CompareTable() {
     : pool.slice(0, 3);
 
   const rows: { label: string; render: (r: PriceResult) => React.ReactNode }[] = [
-    { label: "Webshop", render: (r) => demoRetailers.find((x) => x.id === r.retailerId)?.name },
+    { label: "Webshop", render: (r) => retailers.find((x) => x.id === r.retailerId)?.name ?? "Onbekend" },
     { label: "Prijs", render: (r) => formatPrice(r.price) },
     {
       label: "Korting",
       render: (r) => {
-        const c = couponForResult(r);
+        const c = couponForResult(r, coupons);
         return c ? `${c.code} (${c.value})` : "Geen kortingscode";
       },
     },
     { label: "Verzendkosten", render: (r) => (r.shippingCost === 0 ? "Gratis" : formatPrice(r.shippingCost)) },
-    { label: "Totaalprijs", render: (r) => formatPrice(totalPrice(r)) },
+    { label: "Totaalprijs", render: (r) => formatPrice(totalPrice(r, coupons)) },
     { label: "Levertijd", render: (r) => r.deliveryEstimate },
     { label: "Variant", render: (r) => r.variants.join(", ") },
     { label: "Betrouwbaarheid match", render: (r) => `${r.matchConfidence}%` },
-    { label: "Webshopbeoordeling", render: (r) => `${demoRetailers.find((x) => x.id === r.retailerId)?.rating}/5` },
+    {
+      label: "Webshopbeoordeling",
+      render: (r) => {
+        const rating = retailers.find((x) => x.id === r.retailerId)?.rating;
+        return rating ? `${rating}/5` : "Onbekend";
+      },
+    },
     { label: "Retourvoorwaarden", render: () => "30 dagen bedenktijd (voorbeeld)" },
   ];
 

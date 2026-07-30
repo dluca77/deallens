@@ -1,15 +1,25 @@
 import { Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
-import { couponDiscountAmount, couponForResult, demoRetailers, totalPrice } from "@/lib/demo-data";
-import type { PriceResult } from "@/lib/types";
+import { couponDiscountAmount, couponForResult, demoCoupons, demoRetailers, totalPrice } from "@/lib/demo-data";
+import type { CouponCode, PriceResult, Retailer } from "@/lib/types";
 import { formatPrice } from "@/lib/utils";
 
-export function BestDealCard({ result, msrp }: { result: PriceResult; msrp: number }) {
-  const retailer = demoRetailers.find((r) => r.id === result.retailerId)!;
-  const coupon = couponForResult(result);
-  const discount = couponDiscountAmount(result);
-  const total = totalPrice(result);
+export function BestDealCard({
+  result,
+  msrp,
+  retailers = demoRetailers,
+  coupons = demoCoupons,
+}: {
+  result: PriceResult;
+  msrp: number;
+  retailers?: Retailer[];
+  coupons?: CouponCode[];
+}) {
+  const retailer = retailers.find((r) => r.id === result.retailerId);
+  const coupon = couponForResult(result, coupons);
+  const discount = couponDiscountAmount(result, coupons);
+  const total = totalPrice(result, coupons);
   const savings = Math.round((msrp - total) * 100) / 100;
 
   return (
@@ -18,7 +28,14 @@ export function BestDealCard({ result, msrp }: { result: PriceResult; msrp: numb
         <Badge tone="green" className="text-sm">
           <Sparkles className="h-3.5 w-3.5" /> Beste deal
         </Badge>
-        <span className="text-sm font-medium text-slate-500">bij {retailer.name}</span>
+        <span className="text-sm font-medium text-slate-500">
+          bij {retailer?.name ?? "onbekende webshop"}
+          {result.isLive && (
+            <Badge tone="blue" className="ml-2">
+              Live gevonden
+            </Badge>
+          )}
+        </span>
       </div>
 
       <div className="mt-4 grid gap-6 sm:grid-cols-[140px_1fr]">

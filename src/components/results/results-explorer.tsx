@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, ShieldAlert, Sparkles } from "lucide-react";
+import { Loader2, Pencil, SearchCheck, ShieldAlert, Sparkles, TriangleAlert } from "lucide-react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody } from "@/components/ui/card";
@@ -18,17 +18,21 @@ import {
   demoCoupons,
   demoPriceResults,
   demoProduct,
+  demoRetailers,
   totalPrice,
 } from "@/lib/demo-data";
 import { cn } from "@/lib/utils";
 import { DEALLENS_STORAGE_KEY } from "@/components/scan/scan-flow";
 import type { VisionProductResult } from "@/lib/vision";
-import type { PriceResult } from "@/lib/types";
+import type { CouponCode, PriceResult, Retailer } from "@/lib/types";
 
 type StoredDetectedProduct = VisionProductResult & { image: string; source: "ai" | "demo" };
 export const DEALLENS_RESULTS_STORAGE_KEY = "deallens:lastResultSet";
+export const DEALLENS_RETAILERS_STORAGE_KEY = "deallens:lastRetailers";
+export const DEALLENS_COUPONS_STORAGE_KEY = "deallens:lastCoupons";
 
 type SortKey = "price" | "discount" | "delivery" | "match" | "reliable";
+type SearchStatus = "idle" | "loading" | "success" | "empty" | "error";
 
 const sortOptions: { key: SortKey; label: string }[] = [
   { key: "price", label: "Laagste totaalprijs" },
@@ -47,6 +51,11 @@ export function ResultsExplorer() {
   const [onlyCoupon, setOnlyCoupon] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [detected, setDetected] = useState<StoredDetectedProduct | null>(null);
+  const [searchStatus, setSearchStatus] = useState<SearchStatus>("idle");
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [liveRetailers, setLiveRetailers] = useState<Retailer[]>([]);
+  const [livePriceResults, setLivePriceResults] = useState<PriceResult[]>([]);
+  const [liveCoupons, setLiveCoupons] = useState<CouponCode[]>([]);
 
   useEffect(() => {
     try {
@@ -59,6 +68,58 @@ export function ResultsExplorer() {
       // sessionStorage niet beschikbaar of ongeldige data; val terug op demoproduct.
     }
   }, []);
+
+  useEffect(() => {
+    if (!detected || detected.source !== "ai") return;
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- kicks off an async fetch triggered by a prop change, not derivable during render
+    setSearchStatus("loading");
+    setSearchError(null);
+
+    fetch("/api/search-prices", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        brand: detected.brand,
+        name: detected.name,
+        color: detected.color,
+        size: detected.size,
+        category: detected.category,
+        referencePrice: detected.referencePrice,
+      }),
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (cancelled) return;
+        if (!response.ok) {
+          setSearchStatus("error");
+          setSearchError(data.error ?? "Live prijzen zoeken is mislukt.");
+          return;
+        }
+        if (!data.priceResults || data.priceResults.length === 0) {
+          setSearchStatus("empty");
+          return;
+        }
+        const withImages: PriceResult[] = data.priceResults.map((r: PriceResult) => ({
+          ...r,
+          productImage: r.productImage || detected.image,
+        }));
+        setLiveRetailers(data.retailers ?? []);
+        setLivePriceResults(withImages);
+        setLiveCoupons(data.coupons ?? []);
+        setSearchStatus("success");
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSearchStatus("error");
+          setSearchError("Er ging iets mis bij het zoeken naar actuele prijzen.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detected]);
 
   const productDisplay = detected
     ? {
@@ -80,8 +141,25 @@ export function ResultsExplorer() {
         confidence: demoProduct.confidence,
       };
 
-  const { activeResults, activeAlternatives } = useMemo(() => {
-    if (!detected) return { activeResults: demoPriceResults, activeAlternatives: demoAlternatives };
+  const isLive = searchStatus === "success" && livePriceResults.length > 0;
+
+  const { activeResults, activeAlternatives, activeRetailers, activeCoupons } = useMemo(() => {
+    if (isLive) {
+      return {
+        activeResults: livePriceResults,
+        activeAlternatives: [] as PriceResult[],
+        activeRetailers: [...demoRetailers, ...liveRetailers],
+        activeCoupons: liveCoupons,
+      };
+    }
+    if (!detected) {
+      return {
+        activeResults: demoPriceResults,
+        activeAlternatives: demoAlternatives,
+        activeRetailers: demoRetailers,
+        activeCoupons: demoCoupons,
+      };
+    }
     const generated = buildDemoResultsForProduct({
       brand: detected.brand,
       name: detected.name,
@@ -91,8 +169,13 @@ export function ResultsExplorer() {
       category: detected.category,
       referencePrice: detected.referencePrice,
     });
-    return { activeResults: generated.priceResults, activeAlternatives: generated.alternatives };
-  }, [detected]);
+    return {
+      activeResults: generated.priceResults,
+      activeAlternatives: generated.alternatives,
+      activeRetailers: demoRetailers,
+      activeCoupons: demoCoupons,
+    };
+  }, [isLive, livePriceResults, liveRetailers, liveCoupons, detected]);
 
   useEffect(() => {
     try {
@@ -100,13 +183,15 @@ export function ResultsExplorer() {
         DEALLENS_RESULTS_STORAGE_KEY,
         JSON.stringify([...activeResults, ...activeAlternatives])
       );
+      window.sessionStorage.setItem(DEALLENS_RETAILERS_STORAGE_KEY, JSON.stringify(activeRetailers));
+      window.sessionStorage.setItem(DEALLENS_COUPONS_STORAGE_KEY, JSON.stringify(activeCoupons));
     } catch {
       // sessionStorage niet beschikbaar; vergelijkingspagina valt dan terug op statische demodata.
     }
-  }, [activeResults, activeAlternatives]);
+  }, [activeResults, activeAlternatives, activeRetailers, activeCoupons]);
 
-  const best = bestDealResult(activeResults);
-  const productMsrp = detected ? best.originalPrice ?? best.price : demoProduct.msrp;
+  const best = activeResults.length > 0 ? bestDealResult(activeResults, activeCoupons) : null;
+  const productMsrp = detected?.referencePrice ?? (best ? best.originalPrice ?? best.price : demoProduct.msrp);
 
   const filtered = useMemo(() => {
     let list: PriceResult[] = [...activeResults];
@@ -118,7 +203,7 @@ export function ResultsExplorer() {
     list.sort((a, b) => {
       switch (sort) {
         case "price":
-          return totalPrice(a) - totalPrice(b);
+          return totalPrice(a, activeCoupons) - totalPrice(b, activeCoupons);
         case "discount": {
           const da = a.originalPrice ? 1 - a.price / a.originalPrice : 0;
           const db = b.originalPrice ? 1 - b.price / b.originalPrice : 0;
@@ -135,7 +220,7 @@ export function ResultsExplorer() {
       }
     });
     return list;
-  }, [activeResults, sort, onlyExact, onlyStock, onlyFreeShipping, onlyCoupon]);
+  }, [activeResults, activeCoupons, sort, onlyExact, onlyStock, onlyFreeShipping, onlyCoupon]);
 
   const toggleCompare = (id: string) => {
     setCompareIds((prev) =>
@@ -160,16 +245,40 @@ export function ResultsExplorer() {
         </div>
 
         <div>
-          {detected && (
-            <div className="mb-4 flex items-start gap-2 rounded-xl bg-blue-50 p-3 text-xs text-dl-primary">
-              <Sparkles className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          {detected && searchStatus === "loading" && (
+            <div className="mb-4 flex items-center gap-2 rounded-xl bg-blue-50 p-3 text-xs text-dl-primary">
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+              <p>Live prijzen en kortingscodes zoeken bij webshops op basis van het herkende product…</p>
+            </div>
+          )}
+          {isLive && (
+            <div className="mb-4 flex items-start gap-2 rounded-xl bg-green-50 p-3 text-xs text-dl-green">
+              <SearchCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <p>
-                Dit product is herkend door de vision-AI op basis van jouw geüploade screenshot. De
-                prijzen, webshops en kortingscodes hieronder zijn nog voorbeelddata totdat er live
-                shopping-bronnen zijn gekoppeld.
+                Deze prijzen en webshops zijn live gevonden via websearch op basis van jouw geüploade screenshot.
+                Kortingscodes zijn gevonden en gecontroleerd op meerdere onafhankelijke bronnen, maar nooit
+                daadwerkelijk uitgeprobeerd bij het afrekenen.
               </p>
             </div>
           )}
+          {detected && (searchStatus === "error" || searchStatus === "empty") && (
+            <div className="mb-4 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              <p>
+                {searchStatus === "error"
+                  ? searchError
+                  : "We konden geen actuele prijzen bij webshops vinden voor dit product."}{" "}
+                Onderstaande prijzen en kortingscodes zijn daarom voorbeelddata.
+              </p>
+            </div>
+          )}
+          {detected && searchStatus === "idle" && detected.source === "demo" && (
+            <div className="mb-4 flex items-start gap-2 rounded-xl bg-blue-50 p-3 text-xs text-dl-primary">
+              <Sparkles className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              <p>Dit product is handmatig ingevoerd of via een link toegevoegd. Prijzen hieronder zijn voorbeelddata.</p>
+            </div>
+          )}
+
           <Card className="mb-6">
             <CardBody className="grid gap-4 md:grid-cols-[160px_1fr_auto]">
               <img
@@ -203,55 +312,70 @@ export function ResultsExplorer() {
             </CardBody>
           </Card>
 
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-2 lg:hidden">
-              <label className="inline-flex items-center gap-1.5 rounded-full border border-dl-border bg-white px-3 py-1.5 text-xs">
-                <input type="checkbox" checked={onlyExact} onChange={(e) => setOnlyExact(e.target.checked)} className="accent-dl-primary" />
-                Alleen exacte matches
-              </label>
-              <label className="inline-flex items-center gap-1.5 rounded-full border border-dl-border bg-white px-3 py-1.5 text-xs">
-                <input type="checkbox" checked={onlyStock} onChange={(e) => setOnlyStock(e.target.checked)} className="accent-dl-primary" />
-                Alleen op voorraad
-              </label>
-            </div>
-            <label className="ml-auto flex items-center gap-2 text-sm text-slate-600">
-              Sorteer op
-              <select
-                value={sort}
-                onChange={(e) => setSort(e.target.value as SortKey)}
-                className="rounded-lg border border-dl-border bg-white px-2 py-1.5 text-sm"
-              >
-                {sortOptions.map((o) => (
-                  <option key={o.key} value={o.key}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          {searchStatus === "loading" ? (
+            <Card>
+              <CardBody className="flex flex-col items-center gap-3 py-14 text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-dl-primary" aria-hidden />
+                <p className="text-sm text-slate-500">Even geduld, we doorzoeken het web naar de beste deal…</p>
+              </CardBody>
+            </Card>
+          ) : (
+            <>
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2 lg:hidden">
+                  <label className="inline-flex items-center gap-1.5 rounded-full border border-dl-border bg-white px-3 py-1.5 text-xs">
+                    <input type="checkbox" checked={onlyExact} onChange={(e) => setOnlyExact(e.target.checked)} className="accent-dl-primary" />
+                    Alleen exacte matches
+                  </label>
+                  <label className="inline-flex items-center gap-1.5 rounded-full border border-dl-border bg-white px-3 py-1.5 text-xs">
+                    <input type="checkbox" checked={onlyStock} onChange={(e) => setOnlyStock(e.target.checked)} className="accent-dl-primary" />
+                    Alleen op voorraad
+                  </label>
+                </div>
+                <label className="ml-auto flex items-center gap-2 text-sm text-slate-600">
+                  Sorteer op
+                  <select
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value as SortKey)}
+                    className="rounded-lg border border-dl-border bg-white px-2 py-1.5 text-sm"
+                  >
+                    {sortOptions.map((o) => (
+                      <option key={o.key} value={o.key}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
 
-          <BestDealCard result={best} msrp={productMsrp} />
+              {best && (
+                <BestDealCard result={best} msrp={productMsrp} retailers={activeRetailers} coupons={activeCoupons} />
+              )}
 
-          <div className="mt-6 space-y-4">
-            {filtered
-              .filter((r) => r.id !== best.id)
-              .map((r) => (
-                <ResultCard
-                  key={r.id}
-                  result={r}
-                  compareChecked={compareIds.includes(r.id)}
-                  compareDisabled={compareIds.length >= 4}
-                  onToggleCompare={() => toggleCompare(r.id)}
-                />
-              ))}
-            {filtered.length === 0 && (
-              <Card>
-                <CardBody className="text-center text-sm text-slate-500">
-                  Geen resultaten voor deze filtercombinatie. Pas je filters aan.
-                </CardBody>
-              </Card>
-            )}
-          </div>
+              <div className="mt-6 space-y-4">
+                {filtered
+                  .filter((r) => r.id !== best?.id)
+                  .map((r) => (
+                    <ResultCard
+                      key={r.id}
+                      result={r}
+                      retailers={activeRetailers}
+                      coupons={activeCoupons}
+                      compareChecked={compareIds.includes(r.id)}
+                      compareDisabled={compareIds.length >= 4}
+                      onToggleCompare={() => toggleCompare(r.id)}
+                    />
+                  ))}
+                {filtered.length === 0 && (
+                  <Card>
+                    <CardBody className="text-center text-sm text-slate-500">
+                      Geen resultaten voor deze filtercombinatie. Pas je filters aan.
+                    </CardBody>
+                  </Card>
+                )}
+              </div>
+            </>
+          )}
 
           {compareIds.length > 0 && (
             <div className="fixed bottom-20 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-dl-navy px-5 py-3 text-white shadow-xl md:bottom-6">
@@ -265,35 +389,45 @@ export function ResultsExplorer() {
           <section className="mt-10">
             <h2 className="text-xl font-bold text-dl-navy">Kortingscodes</h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {demoCoupons.map((c) => (
-                <CouponCard key={c.id} coupon={c} />
+              {activeCoupons.map((c) => (
+                <CouponCard key={c.id} coupon={c} retailers={activeRetailers} />
               ))}
+              {activeCoupons.length === 0 && (
+                <Card>
+                  <CardBody className="text-sm text-slate-500">
+                    We hebben momenteel geen betrouwbare kortingscode voor deze webshops gevonden.
+                  </CardBody>
+                </Card>
+              )}
             </div>
             <p className="mt-3 flex items-start gap-1.5 text-xs text-slate-400">
               <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               DealLens AI garandeert nooit dat een kortingscode werkt wanneer deze niet daadwerkelijk gecontroleerd
-              kon worden.
+              kon worden. Codes worden niet automatisch bij het afrekenen getest, enkel gekruisverifieerd op
+              meerdere bronnen.
             </p>
           </section>
 
-          <section className="mt-10">
-            <h2 className="text-xl font-bold text-dl-navy">Goedkoopste alternatieven</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Het exacte product is niet overal verkrijgbaar. Onderstaande producten zijn geen exact hetzelfde
-              product.
-            </p>
-            <div className="mt-4 space-y-4">
-              {activeAlternatives.map((alt) => (
-                <div key={alt.id}>
-                  <div className="mb-1 flex items-center gap-2">
-                    <MatchBadge label="alternative" />
-                    <span className="text-xs text-slate-500">{alt.matchConfidence}% overeenkomst</span>
+          {activeAlternatives.length > 0 && (
+            <section className="mt-10">
+              <h2 className="text-xl font-bold text-dl-navy">Goedkoopste alternatieven</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Het exacte product is niet overal verkrijgbaar. Onderstaande producten zijn geen exact hetzelfde
+                product (voorbeelddata).
+              </p>
+              <div className="mt-4 space-y-4">
+                {activeAlternatives.map((alt) => (
+                  <div key={alt.id}>
+                    <div className="mb-1 flex items-center gap-2">
+                      <MatchBadge label="alternative" />
+                      <span className="text-xs text-slate-500">{alt.matchConfidence}% overeenkomst</span>
+                    </div>
+                    <ResultCard result={alt} retailers={activeRetailers} coupons={activeCoupons} />
                   </div>
-                  <ResultCard result={alt} />
-                </div>
-              ))}
-            </div>
-          </section>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className="mt-10">
             <FeedbackButtons />
@@ -302,17 +436,21 @@ export function ResultsExplorer() {
           <p className="mt-10 rounded-xl bg-slate-100 p-4 text-xs text-slate-500">
             Prijzen, voorraad en kortingscodes kunnen veranderen. Controleer de uiteindelijke prijs en voorwaarden
             altijd op de website van de aanbieder. DealLens AI verkoopt zelf geen producten, is niet verantwoordelijk
-            voor wijzigingen bij webshops en kan affiliatecommissies ontvangen. Alle resultaten op deze pagina zijn
-            demodata.
+            voor wijzigingen bij webshops en kan affiliatecommissies ontvangen.{" "}
+            {isLive
+              ? "Deze resultaten zijn live opgezocht, maar kunnen inmiddels gewijzigd zijn."
+              : "Alle resultaten op deze pagina zijn demodata."}
           </p>
         </div>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 flex justify-center border-t border-dl-border bg-white/95 p-3 backdrop-blur md:hidden">
-        <ButtonLink href={best.url} target="_blank" rel="noopener noreferrer nofollow sponsored" size="lg" className="w-full max-w-sm justify-center">
-          Bekijk goedkoopste deal
-        </ButtonLink>
-      </div>
+      {best && (
+        <div className="fixed inset-x-0 bottom-0 z-20 flex justify-center border-t border-dl-border bg-white/95 p-3 backdrop-blur md:hidden">
+          <ButtonLink href={best.url} target="_blank" rel="noopener noreferrer nofollow sponsored" size="lg" className="w-full max-w-sm justify-center">
+            Bekijk goedkoopste deal
+          </ButtonLink>
+        </div>
+      )}
     </div>
   );
 }

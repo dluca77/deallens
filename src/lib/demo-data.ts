@@ -222,19 +222,27 @@ export const demoAlternatives: PriceResult[] = [
   },
 ];
 
-export function bestDealResult(list: PriceResult[] = demoPriceResults): PriceResult {
+export function bestDealResult(
+  list: PriceResult[] = demoPriceResults,
+  coupons: CouponCode[] = demoCoupons
+): PriceResult {
   const candidates = list.filter((r) => !r.sponsored);
   return candidates.reduce((best, current) => {
-    const bestTotal = totalPrice(best);
-    const currentTotal = totalPrice(current);
+    const bestTotal = totalPrice(best, coupons);
+    const currentTotal = totalPrice(current, coupons);
     if (currentTotal < bestTotal) return current;
     if (currentTotal === bestTotal && current.matchConfidence > best.matchConfidence) return current;
     return best;
   }, candidates[0]);
 }
 
-export function cheapestAlternative(list: PriceResult[] = demoPriceResults): PriceResult {
-  return [...list].filter((r) => r.matchLabel !== "exact").sort((a, b) => totalPrice(a) - totalPrice(b))[0];
+export function cheapestAlternative(
+  list: PriceResult[] = demoPriceResults,
+  coupons: CouponCode[] = demoCoupons
+): PriceResult {
+  return [...list]
+    .filter((r) => r.matchLabel !== "exact")
+    .sort((a, b) => totalPrice(a, coupons) - totalPrice(b, coupons))[0];
 }
 
 function seedFromString(value: string): number {
@@ -404,29 +412,31 @@ export function buildDemoResultsForProduct(product: RecognizedProductLike): {
   return { priceResults, alternatives };
 }
 
-export function couponForResult(result: PriceResult): CouponCode | undefined {
-  return demoCoupons.find((c) => c.id === result.couponId);
+export function couponForResult(result: PriceResult, coupons: CouponCode[] = demoCoupons): CouponCode | undefined {
+  return coupons.find((c) => c.id === result.couponId);
 }
 
-export function retailerForResult(result: { retailerId: string }): Retailer {
-  return demoRetailers.find((r) => r.id === result.retailerId)!;
+export function retailerForResult(result: { retailerId: string }, retailers: Retailer[] = demoRetailers): Retailer {
+  return retailers.find((r) => r.id === result.retailerId)!;
 }
 
-export function couponDiscountAmount(result: PriceResult): number {
-  const coupon = couponForResult(result);
+export function couponDiscountAmount(result: PriceResult, coupons: CouponCode[] = demoCoupons): number {
+  const coupon = couponForResult(result, coupons);
   if (!coupon) return 0;
   if (coupon.type === "percentage") {
     const pct = parseFloat(coupon.value) / 100;
+    if (Number.isNaN(pct)) return 0;
     return Math.round(result.price * pct * 100) / 100;
   }
   if (coupon.type === "fixed") {
-    return parseFloat(coupon.value.replace(/[^0-9.,]/g, "").replace(",", "."));
+    const amount = parseFloat(coupon.value.replace(/[^0-9.,]/g, "").replace(",", "."));
+    return Number.isNaN(amount) ? 0 : amount;
   }
   return 0;
 }
 
-export function totalPrice(result: PriceResult): number {
-  const discount = couponDiscountAmount(result);
+export function totalPrice(result: PriceResult, coupons: CouponCode[] = demoCoupons): number {
+  const discount = couponDiscountAmount(result, coupons);
   return Math.max(0, Math.round((result.price + result.shippingCost - discount) * 100) / 100);
 }
 
